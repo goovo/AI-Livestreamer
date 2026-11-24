@@ -1,0 +1,63 @@
+# goovo-human 主配置。复制为 config.local.toml 可覆盖（run --config config.local.toml）。
+
+[avatar]
+# 录制两段竖屏视频：idle = 闭嘴静默待机；talk = 自然说话状态（内容随意）。
+# 没有 talk 视频时自动退化为单视频循环。
+idle = "assets/idle.mp4"
+talk = "assets/talk.mp4"
+# auto = 有 MuseTalk MLX 环境时用 neural（GPU 神经口型，最自然），
+#        否则有口型素材时用 mouth（音频驱动口型），再否则 switch；
+#        也可强制 neural / mouth / switch / loop
+engine = "auto"
+width = 1080
+height = 1920
+fps = 30
+
+[voice]
+# edge = 微软在线神经语音（免费、自然，需联网）
+# macos = 系统 say 命令（离线兜底）
+# http  = 自建语音克隆服务（GPT-SoVITS / CosyVoice 等，返回音频字节）
+# http = 本机 F5-TTS 克隆服务（tools/clone_server.py），用你 talk.mp4 里的声音
+engine = "http"
+voice = "zh-CN-YunxiNeural"   # edge 兜底/未克隆时的男声
+rate = "+0%"
+volume = "+0%"
+fallback_macos = true
+macos_voice = "Tingting"
+fallback_voice = "zh-CN-YunxiNeural"   # 克隆服务不可用时回退的男声
+
+[voice.http]
+url = "http://127.0.0.1:9880/tts"   # tools/clone_server.py
+method = "POST"
+# JSON 模板，{text} 会被替换；响应体应为 wav/mp3 音频字节
+json_body = '{"text": "{text}"}'
+
+[brain]
+# playlist = 循环播放 scripts/ 下的口播稿；llm = 由大模型按人设实时撰稿
+mode = "playlist"
+scripts_dir = "scripts"
+shuffle = false
+gap_seconds = 2.0          # 每段口播之间的静默间隔
+prefetch = 2               # 提前合成的段数
+persona = "你是一位亲切、专业的带货主播，说话口语化、有节奏感，擅长和观众互动。"
+topics = ["开场欢迎", "产品卖点讲解", "使用场景", "答疑互动", "限时优惠促单"]
+
+[brain.llm]
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
+api_key_env = "OPENAI_API_KEY"
+max_chars = 140
+temperature = 0.8
+
+[stream]
+# preview = 本机预览窗口；rtmp = 推流到视频号/抖音等；record = 录制到本地文件
+sink = "preview"
+rtmp_url = ""              # 视频号助手获取的完整推流地址（含密钥）
+record_path = "output/live.mkv"
+video_bitrate = "3000k"    # 官方建议 3000kbps / AAC-LC / 30fps
+audio_bitrate = "128k"
+preview_scale = 0.5        # 预览窗口 = 输出分辨率 × 此比例；Retina 屏窗口捕获仍为全分辨率
+
+[panel]
+host = "127.0.0.1"
+port = 8765

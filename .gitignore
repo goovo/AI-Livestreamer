@@ -1,0 +1,20 @@
+# 虚拟环境（主环境 / 声音克隆 / MuseTalk 渲染，均为安装产物，不入库）
+.venv*/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+# 模型权重、TTS/口型缓存、诊断样片、录制输出（可再生，体积大）
+.cache/
+output/
+# 个人肖像/声音素材与生成物（体积大且含生物特征，不入库）
+assets/*.mp4
+assets/*.mov
+assets/mouth/
+assets/voice/
+config.local.toml
+.DS_Store
+*.log
+nohup.out

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>goovo-human 控制台</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", sans-serif; background: #0f1420; color: #e8ecf4; padding: 20px; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 16px; }
+  h1 span { color: #6ea8fe; }
+  .card { background: #1a2233; border: 1px solid #2a3550; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; background: #2a3550; }
+  .badge.live { background: #1d4d2b; color: #7ee2a0; }
+  .badge.talk { background: #4d3a1d; color: #ffc46e; }
+  .muted { color: #8b96ad; font-size: 13px; }
+  .current { margin-top: 10px; font-size: 15px; line-height: 1.6; min-height: 24px; }
+  textarea { width: 100%; background: #0f1420; color: #e8ecf4; border: 1px solid #2a3550; border-radius: 8px; padding: 10px; font-size: 15px; min-height: 84px; resize: vertical; font-family: inherit; }
+  button { background: #2f6fed; color: #fff; border: 0; border-radius: 8px; padding: 9px 18px; font-size: 14px; cursor: pointer; }
+  button.secondary { background: #2a3550; }
+  button.warn { background: #b3541e; }
+  button:disabled { opacity: .5; cursor: default; }
+  label { font-size: 13px; color: #b7c0d4; display: flex; gap: 6px; align-items: center; }
+  .history { list-style: none; max-height: 320px; overflow-y: auto; }
+  .history li { padding: 8px 0; border-bottom: 1px solid #232d45; font-size: 13px; line-height: 1.5; }
+  .history .meta { color: #6ea8fe; font-size: 12px; margin-right: 8px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2f6fed; padding: 10px 20px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .error { color: #ff8f8f; font-size: 13px; margin-top: 8px; }
+  select { background: #0f1420; color: #e8ecf4; border: 1px solid #2a3550; border-radius: 6px; padding: 6px; }
+</style>
+</head>
+<body>
+<h1>goovo<span>·</span>human 口播控制台</h1>
+
+<div class="card">
+  <div class="row">
+    <span id="sinkBadge" class="badge">…</span>
+    <span id="speakBadge" class="badge">待机</span>
+    <span class="muted" id="meta"></span>
+    <span style="flex:1"></span>
+    <label>模式
+      <select id="mode">
+        <option value="playlist">稿件循环</option>
+        <option value="llm">LLM 撰稿</option>
+      </select>
+    </label>
+    <button id="pauseBtn" class="secondary">暂停口播</button>
+  </div>
+  <div class="current" id="current">（等待口播…）</div>
+  <div class="error" id="error"></div>
+</div>
+
+<div class="card">
+  <textarea id="sayText" placeholder="输入想让数字人立刻说的话，例如：欢迎新进直播间的朋友，点个关注不迷路～"></textarea>
+  <div class="row" style="margin-top:10px">
+    <button id="sayBtn">排队播报</button>
+    <button id="interruptBtn" class="warn">立即插播（打断当前）</button>
+    <label><input type="checkbox" id="autoClear" checked> 发送后清空</label>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="margin-bottom:8px"><strong style="font-size:14px">最近口播</strong><span class="muted" id="queueInfo"></span></div>
+  <ul class="history" id="history"></ul>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let paused = false;
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body ? {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  } : undefined);
+  return res.json();
+}
+
+async function refresh() {
+  try {
+    const s = await api('/api/status');
+    const sinkNames = {preview: '本机预览', rtmp: 'RTMP 推流', record: '本地录制'};
+    const badge = $('sinkBadge');
+    badge.textContent = (sinkNames[s.sink] || s.sink) + (s.sink_alive ? ' · 运行中' : ' · 已停止');
+    badge.className = 'badge' + (s.sink_alive ? ' live' : '');
+    const speak = $('speakBadge');
+    speak.textContent = s.speaking ? '正在口播' : (s.paused ? '已暂停' : '待机');
+    speak.className = 'badge' + (s.speaking ? ' talk' : '');
+    $('meta').textContent = `${s.resolution}@${s.fps}fps · 已运行 ${Math.round(s.uptime)}s`;
+    $('current').textContent = s.current || '（等待口播…）';
+    $('error').textContent = s.last_error || '';
+    $('queueInfo').textContent = `已备稿 ${s.queued} 段 · 插播 ${s.priority} 段 · 稿件库 ${s.playlist_size} 段`;
+    if (document.activeElement !== $('mode')) $('mode').value = s.mode;
+    paused = s.paused;
+    $('pauseBtn').textContent = paused ? '恢复口播' : '暂停口播';
+    $('history').innerHTML = s.history.map(h =>
+      `<li><span class="meta">${h.at} · ${h.source}</span>${h.text}</li>`).join('');
+  } catch (e) { /* 服务未就绪时静默 */ }
+}
+
+async function sendSay(interrupt) {
+  const text = $('sayText').value.trim();
+  if (!text) { toast('先输入内容'); return; }
+  const r = await api('/api/say', {text, interrupt});
+  if (r.ok) {
+    toast(interrupt ? '已插播' : '已加入队列');
+    if ($('autoClear').checked) $('sayText').value = '';
+  } else toast(r.error || '发送失败');
+}
+
+$('sayBtn').onclick = () => sendSay(false);
+$('interruptBtn').onclick = () => sendSay(true);
+$('pauseBtn').onclick = async () => { await api('/api/pause', {paused: !paused}); refresh(); };
+$('mode').onchange = async e => { const r = await api('/api/mode', {mode: e.target.value}); toast(r.ok ? '模式已切换' : r.error); };
+
+refresh();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>
